@@ -1,0 +1,56 @@
+/* x11.h - a tiny X11 client that speaks the wire protocol directly.
+ * Needs only libc: no Xlib, no xcb, no dev headers. LGPL-3.0-or-later. */
+#ifndef X11_H
+#define X11_H
+#include <stdint.h>
+
+enum { X_NONE, X_KEY, X_BTN_DOWN, X_BTN_UP, X_MOTION, X_WHEEL, X_RESIZE, X_EXPOSE, X_CLOSE, X_LEAVE,
+       X_KEY_UP, X_FOCUS_IN, X_FOCUS_OUT };   
+enum { M_CTRL = 1, M_SHIFT = 2, M_ALT = 4 };
+enum { B_LEFT = 1, B_MID = 2, B_RIGHT = 4 };      /* mouse buttons as bits, button n is 1 << (n - 1) */
+
+/* X keysyms for the keys I care about printable keys use their ASCII value. */
+enum { K_BACKSPACE = 0xff08, K_TAB = 0xff09, K_RETURN = 0xff0d, K_ESCAPE = 0xff1b,
+       K_HOME = 0xff50, K_LEFT = 0xff51, K_UP = 0xff52, K_RIGHT = 0xff53, K_DOWN = 0xff54,
+       K_PGUP = 0xff55, K_PGDN = 0xff56, K_END = 0xff57, K_DELETE = 0xffff };
+
+/* glyph numbers in the standard X "cursor" font, for x_cursor() */
+enum { X_CUR_CROSS = 34, X_CUR_HAND = 60, X_CUR_ARROW = 68, X_CUR_HSIZE = 108,
+       X_CUR_VSIZE = 116, X_CUR_WAIT = 150, X_CUR_IBEAM = 152 };
+
+typedef struct {
+    int type;
+    int key;          /* X_KEY / X_KEY_UP: keysym (letters lowercased when Ctrl is held) */
+    int code;         /* X_KEY / X_KEY_UP: hardware keycode a press and its release share it even if the keysym changed (Shift) */
+    unsigned mod;     /* M_* bits */
+    char text[8];     /* X_KEY: UTF-8 to insert, "" if the key is not text */
+    int x, y, button; /* mouse events */
+    int dy;           /* X_WHEEL: +1 up, -1 down */
+    int w, h;         /* X_RESIZE */
+    int synthetic;    /* 1 if a another client sent this event (XSendEvent), not the X server's own input */
+} XEv;
+
+extern uint32_t *x_fb;   /* 0x00RRGGBB framebuffer, x_w * x_h */
+extern int x_w, x_h;
+extern int x_allow_synthetic; /* 0 (default): synthetic key/button/motion events are dropped. Set 1 otherwise */
+extern int x_trust_selection; /* 0 (default): SelectionNotify is accepted only as the answer to a paste request
+                                (our window, CLIPBOARD, our property or None). 1: accept any including unsolicited ones
+                                naming any property of a window. */
+extern int x_scale;      /* 1, 2 or 3: integer UI magnification suggested by the screen's pixel density */
+
+/* Window options. All 0 by default (= the behaviour without them); set before x_open(). */
+extern int x_keyup;      /* 1: select KeyRelease and emit X_KEY_UP (key/mod set, text empty). Auto-repeat is not reported as
+                            release/press pairs: the releases are dropped and the repeats arrive as X_KEY. */
+extern int x_focus;      /* 1: select focus changes and emit X_FOCUS_IN / X_FOCUS_OUT (grab/ungrab focus changes are ignored) */
+extern int x_fixed_size; /* 1: set WM_NORMAL_HINTS min = max = the opened size, so the window manager does not resize it */
+
+int  x_open(int w, int h, const char *title, uint32_t bg); /* 0 on success, error on stderr */
+int  x_wait(XEv *ev, int timeout_ms);                      /* 1 if an event was returned */
+void x_present(void);                                      /* upload the framebuffer */
+void x_clip_set(const char *utf8);
+char *x_clip_get(void);                                    /* malloc'd, or NULL */
+void x_set_icon(int w, int h, const uint32_t *argb);       /* ARGB, after x_open */
+void x_set_title(const char *utf8);
+void x_cursor(int glyph);                                  /* X_CUR_*; default is X_CUR_ARROW */
+void x_close(void);
+#endif
